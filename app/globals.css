@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
+/* 「勉強ノート」を思わせる、紙とインクのような配色。
+   忘却曲線=記憶が育っていくイメージとして、差し色はモスグリーンを採用。 */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #F5F1E8;
+  --paper-card: #FFFCF6;
+  --ink: #2A2620;
+  --ink-sub: #7A7263;
+  --line: #E3DCC9;
+  --moss: #3F6B4A;
+  --moss-ink: #F5F1E8;
+  --clay: #A8503F;
+  --gold: #A9781F;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-paper: var(--paper);
+  --color-paper-card: var(--paper-card);
+  --color-ink: var(--ink);
+  --color-ink-sub: var(--ink-sub);
+  --color-line: var(--line);
+  --color-moss: var(--moss);
+  --color-moss-ink: var(--moss-ink);
+  --color-clay: var(--clay);
+  --color-gold: var(--gold);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-source-serif);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --paper: #1E1C17;
+    --paper-card: #262319;
+    --ink: #EDE7D9;
+    --ink-sub: #A39A87;
+    --line: #3A3527;
+    --moss: #6E9B78;
+    --moss-ink: #1E1C17;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
 }

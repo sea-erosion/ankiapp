@@ -1,8 +1,6 @@
 'use client';
 
-// 実験段階なので、ルーティング(URLで画面を分ける仕組み)は使わず、
-// 1つのページの中でReactのuseStateを使って「今どの画面を表示するか」を
-// 切り替えるだけのシンプルな作りにしています。
+// 実験段階なので、ルーティングは使わず1ページ内でuseStateにより画面を切り替える。
 import { useMemo, useState } from 'react';
 import { Card, QuizMode } from '@/lib/types';
 import { decks, buildInitialCards } from '@/lib/cardPool';
@@ -10,21 +8,24 @@ import { applyReview, currentRetention, isDue } from '@/lib/srs';
 
 type View = 'home' | 'cards' | 'review';
 
-// 保持率に応じてバーの色を変える(70%以上=緑、40%以上=黄、それ未満=赤)
+// 保持率に応じてバーの色を変える(70%以上=モス、40%以上=ゴールド、それ未満=クレイ)
 function retentionColor(r: number) {
-  if (r > 0.7) return '#3B7A4E';
-  if (r > 0.4) return '#B8873A';
-  return '#B5453A';
+  if (r > 0.7) return 'var(--moss)';
+  if (r > 0.4) return 'var(--gold)';
+  return 'var(--clay)';
 }
 
+const TABS: { key: View; label: string }[] = [
+  { key: 'home', label: 'ホーム' },
+  { key: 'cards', label: 'カード' },
+  { key: 'review', label: '復習' },
+];
+
 export default function Home() {
-  // カードの一覧をReactの状態(state)として持つ。
-  // useState(buildInitialCards) と書くと、最初の1回だけ初期値を計算してくれる。
   const [cards, setCards] = useState<Card[]>(() => buildInitialCards());
   const [view, setView] = useState<View>('home');
   const [selectedDeckId, setSelectedDeckId] = useState(decks[0]?.id ?? '');
 
-  // 復習セッション用の状態
   const [quizQueue, setQuizQueue] = useState<Card[]>([]);
   const [quizIndex, setQuizIndex] = useState(0);
   const [modeForTurn, setModeForTurn] = useState<QuizMode>('flashcard');
@@ -32,10 +33,13 @@ export default function Home() {
   const deckCards = (deckId: string) => cards.filter((c) => c.deckId === deckId);
   const dueCards = useMemo(() => cards.filter(isDue), [cards]);
 
-  // 1枚のカードを更新する共通処理。
-  // 配列全体を作り直す(idが一致するものだけ差し替える)のがReactでの定石。
   function updateCard(updated: Card) {
     setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+  }
+
+  function pickMode(card: Card): QuizMode {
+    const modes = card.allowedModes.length ? card.allowedModes : (['flashcard'] as QuizMode[]);
+    return modes[Math.floor(Math.random() * modes.length)];
   }
 
   function startReview(list: Card[]) {
@@ -50,12 +54,6 @@ export default function Home() {
     setView('review');
   }
 
-  function pickMode(card: Card): QuizMode {
-    const modes = card.allowedModes.length ? card.allowedModes : ['flashcard'];
-    return modes[Math.floor(Math.random() * modes.length)];
-  }
-
-  // 1問答えたあとに呼ぶ。カードの状態を更新して、次の問題に進む。
   function handleAnswer(card: Card, quality: number) {
     const updated = applyReview(card, quality);
     updateCard(updated);
@@ -67,49 +65,49 @@ export default function Home() {
   }
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '24px 16px 80px', fontFamily: 'sans-serif' }}>
-      <nav style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {(['home', 'cards', 'review'] as View[]).map((v) => (
+    <main className="mx-auto min-h-full w-full max-w-md px-5 pb-24 pt-8 font-sans text-ink">
+      <h1 className="font-serif text-lg font-semibold tracking-tight">忘却曲線暗記</h1>
+
+      <nav className="mt-5 flex gap-5 border-b border-line">
+        {TABS.map((t) => (
           <button
-            key={v}
-            onClick={() => setView(v)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: '1px solid #ccc',
-              background: view === v ? '#3B6D5A' : '#fff',
-              color: view === v ? '#fff' : '#333',
-            }}
+            key={t.key}
+            onClick={() => setView(t.key)}
+            className={`-mb-px border-b-2 pb-2 text-sm transition ${
+              view === t.key
+                ? 'border-moss text-ink font-medium'
+                : 'border-transparent text-ink-sub hover:text-ink'
+            }`}
           >
-            {v === 'home' ? 'ホーム' : v === 'cards' ? 'カード' : '復習'}
+            {t.label}
           </button>
         ))}
       </nav>
 
-      {view === 'home' && (
-        <HomeView dueCount={dueCards.length} onStart={() => startReview(dueCards)} />
-      )}
+      <div className="mt-6">
+        {view === 'home' && <HomeView dueCount={dueCards.length} onStart={() => startReview(dueCards)} />}
 
-      {view === 'cards' && (
-        <CardsView
-          selectedDeckId={selectedDeckId}
-          onSelectDeck={setSelectedDeckId}
-          cards={deckCards(selectedDeckId)}
-          onReview={(list) => startReview(list.filter(isDue).length ? list.filter(isDue) : list)}
-        />
-      )}
+        {view === 'cards' && (
+          <CardsView
+            selectedDeckId={selectedDeckId}
+            onSelectDeck={setSelectedDeckId}
+            cards={deckCards(selectedDeckId)}
+            onReview={(list) => startReview(list.filter(isDue).length ? list.filter(isDue) : list)}
+          />
+        )}
 
-      {view === 'review' && (
-        <ReviewView
-          card={quizQueue[quizIndex]}
-          mode={modeForTurn}
-          index={quizIndex}
-          total={quizQueue.length}
-          allCards={cards}
-          onAnswer={handleAnswer}
-          onFinish={() => setView('home')}
-        />
-      )}
+        {view === 'review' && (
+          <ReviewView
+            card={quizQueue[quizIndex]}
+            mode={modeForTurn}
+            index={quizIndex}
+            total={quizQueue.length}
+            allCards={cards}
+            onAnswer={handleAnswer}
+            onFinish={() => setView('home')}
+          />
+        )}
+      </div>
     </main>
   );
 }
@@ -117,12 +115,13 @@ export default function Home() {
 // ---------- ホーム画面 ----------
 function HomeView({ dueCount, onStart }: { dueCount: number; onStart: () => void }) {
   return (
-    <div>
-      <p style={{ color: '#888', margin: 0 }}>今日の復習</p>
-      <p style={{ fontSize: 32, fontWeight: 700, margin: '4px 0 20px' }}>{dueCount}枚</p>
+    <div className="rounded-2xl border border-line bg-paper-card p-6">
+      <p className="text-sm text-ink-sub">今日の復習</p>
+      <p className="mt-1 font-serif text-5xl font-semibold">{dueCount}</p>
+      <p className="mb-5 text-sm text-ink-sub">枚</p>
       <button
         onClick={onStart}
-        style={{ width: '100%', padding: 14, background: '#3B6D5A', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15 }}
+        className="w-full rounded-xl bg-moss py-3 text-sm font-medium text-moss-ink transition hover:opacity-90"
       >
         復習を始める
       </button>
@@ -144,42 +143,47 @@ function CardsView({
 }) {
   return (
     <div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div className="mb-5 flex gap-4 text-sm">
         {decks.map((d) => (
-          <span
+          <button
             key={d.id}
             onClick={() => onSelectDeck(d.id)}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 8,
-              fontSize: 13,
-              cursor: 'pointer',
-              background: d.id === selectedDeckId ? '#3B6D5A' : '#eee',
-              color: d.id === selectedDeckId ? '#fff' : '#333',
-            }}
+            className={
+              d.id === selectedDeckId
+                ? 'font-medium text-ink underline decoration-moss decoration-2 underline-offset-4'
+                : 'text-ink-sub hover:text-ink'
+            }
           >
             {d.name}
-          </span>
+          </button>
         ))}
       </div>
 
-      {cards.map((c) => {
-        const r = currentRetention(c);
-        return (
-          <div key={c.id} style={{ border: '1px solid #e0e0e0', borderRadius: 10, padding: 12, marginBottom: 8 }}>
-            <div>{c.front} / {c.back}</div>
-            <div style={{ height: 6, background: '#eee', borderRadius: 3, marginTop: 6, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.round(r * 100)}%`, height: '100%', background: retentionColor(r) }} />
+      <div className="space-y-3">
+        {cards.map((c) => {
+          const r = currentRetention(c);
+          return (
+            <div key={c.id} className="rounded-xl border border-line bg-paper-card p-4">
+              <div className="text-sm">
+                {c.front} <span className="text-ink-sub">/ {c.back}</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${Math.round(r * 100)}%`, background: retentionColor(r) }}
+                />
+              </div>
+              <div className="mt-1.5 text-xs text-ink-sub">保持率 {Math.round(r * 100)}%</div>
             </div>
-            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>保持率 {Math.round(r * 100)}%</div>
-          </div>
-        );
-      })}
+          );
+        })}
+        {cards.length === 0 && <p className="text-sm text-ink-sub">カードがありません。</p>}
+      </div>
 
       {cards.length > 0 && (
         <button
           onClick={() => onReview(cards)}
-          style={{ width: '100%', padding: 12, marginTop: 8, borderRadius: 10, border: '1px solid #ccc' }}
+          className="mt-4 w-full rounded-xl border border-line py-2.5 text-sm text-ink transition hover:border-moss hover:text-moss"
         >
           このデッキを復習
         </button>
@@ -208,9 +212,12 @@ function ReviewView({
 }) {
   if (!card) {
     return (
-      <div style={{ textAlign: 'center', padding: 40 }}>
-        <p>復習完了です。お疲れさまでした。</p>
-        <button onClick={onFinish} style={{ padding: '10px 20px', borderRadius: 10, background: '#3B6D5A', color: '#fff', border: 'none' }}>
+      <div className="rounded-2xl border border-line bg-paper-card p-8 text-center">
+        <p className="text-sm text-ink-sub">復習完了です。お疲れさまでした。</p>
+        <button
+          onClick={onFinish}
+          className="mt-4 rounded-xl bg-moss px-6 py-2.5 text-sm font-medium text-moss-ink hover:opacity-90"
+        >
           ホームへ
         </button>
       </div>
@@ -221,7 +228,9 @@ function ReviewView({
 
   return (
     <div>
-      <p style={{ color: '#888', fontSize: 13 }}>保持率 {Math.round(r * 100)}% ・ {index + 1}/{total}枚</p>
+      <p className="mb-3 text-xs text-ink-sub">
+        保持率 {Math.round(r * 100)}% ・ {index + 1}/{total}枚
+      </p>
       {mode === 'flashcard' && <Flashcard key={card.id} card={card} onAnswer={onAnswer} />}
       {mode === 'multiple_choice' && <MultipleChoice key={card.id} card={card} allCards={allCards} onAnswer={onAnswer} />}
       {mode === 'free_text' && <FreeText key={card.id} card={card} onAnswer={onAnswer} />}
@@ -230,23 +239,28 @@ function ReviewView({
   );
 }
 
+const choiceBtn =
+  'rounded-lg border border-line py-3 text-sm transition hover:border-moss hover:bg-moss/5 disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-transparent';
+
 function Flashcard({ card, onAnswer }: { card: Card; onAnswer: (card: Card, quality: number) => void }) {
   const [flipped, setFlipped] = useState(false);
   return (
-    <div style={{ border: '1px solid #e0e0e0', borderRadius: 12, padding: 16, textAlign: 'center' }}>
-      <p style={{ fontSize: 17, fontWeight: 600 }}>{card.front}</p>
+    <div className="rounded-2xl border border-line bg-paper-card p-6 text-center">
+      <p className="font-serif text-xl font-semibold">{card.front}</p>
       {flipped ? (
         <>
-          <p style={{ color: '#888', borderTop: '1px solid #eee', paddingTop: 10 }}>{card.back}</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
-            <button onClick={() => onAnswer(card, 1)}>忘れた</button>
-            <button onClick={() => onAnswer(card, 3)}>難しい</button>
-            <button onClick={() => onAnswer(card, 4)}>普通</button>
-            <button onClick={() => onAnswer(card, 5)}>簡単</button>
+          <p className="mt-4 border-t border-line pt-4 text-ink-sub">{card.back}</p>
+          <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
+            <button onClick={() => onAnswer(card, 1)} className={`${choiceBtn} border-clay/40 text-clay`}>忘れた</button>
+            <button onClick={() => onAnswer(card, 3)} className={`${choiceBtn} border-gold/40 text-gold`}>難しい</button>
+            <button onClick={() => onAnswer(card, 4)} className={choiceBtn}>普通</button>
+            <button onClick={() => onAnswer(card, 5)} className={`${choiceBtn} border-moss/40 text-moss`}>簡単</button>
           </div>
         </>
       ) : (
-        <button onClick={() => setFlipped(true)} style={{ width: '100%', marginTop: 10 }}>答えを見る</button>
+        <button onClick={() => setFlipped(true)} className="mt-5 w-full rounded-xl border border-line py-2.5 text-sm hover:border-moss hover:text-moss">
+          答えを見る
+        </button>
       )}
     </div>
   );
@@ -272,15 +286,22 @@ function MultipleChoice({ card, allCards, onAnswer }: { card: Card; allCards: Ca
   }
 
   return (
-    <div style={{ border: '1px solid #e0e0e0', borderRadius: 12, padding: 16, textAlign: 'center' }}>
-      <p style={{ fontSize: 17, fontWeight: 600 }}>{card.front}</p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+    <div className="rounded-2xl border border-line bg-paper-card p-6 text-center">
+      <p className="font-serif text-xl font-semibold">{card.front}</p>
+      <div className="mt-4 grid grid-cols-2 gap-2">
         {options.map((o) => (
-          <button key={o} onClick={() => choose(o)} disabled={!!picked}>{o}</button>
+          <button
+            key={o}
+            onClick={() => choose(o)}
+            disabled={!!picked}
+            className={`${choiceBtn} ${picked === o && o !== card.back ? 'border-clay text-clay' : ''} ${picked && o === card.back ? 'border-moss text-moss' : ''}`}
+          >
+            {o}
+          </button>
         ))}
       </div>
       {picked && picked !== card.back && (
-        <p style={{ color: '#B5453A', fontSize: 13, marginTop: 8 }}>正解は「{card.back}」でした</p>
+        <p className="mt-3 text-xs text-clay">正解は「{card.back}」でした</p>
       )}
     </div>
   );
@@ -299,17 +320,26 @@ function FreeText({ card, onAnswer }: { card: Card; onAnswer: (card: Card, quali
   }
 
   return (
-    <div style={{ border: '1px solid #e0e0e0', borderRadius: 12, padding: 16 }}>
-      <p style={{ fontSize: 17, fontWeight: 600 }}>{card.front}</p>
+    <div className="rounded-2xl border border-line bg-paper-card p-6">
+      <p className="text-center font-serif text-xl font-semibold">{card.front}</p>
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
         disabled={!!result}
         placeholder="答えを入力"
-        style={{ width: '100%', padding: 8, marginTop: 8 }}
+        onKeyDown={(e) => e.key === 'Enter' && submit()}
+        className="mt-4 w-full rounded-lg border border-line bg-transparent px-3 py-2.5 text-sm outline-none focus:border-moss"
       />
-      {!result && <button onClick={submit} style={{ width: '100%', marginTop: 8 }}>確認</button>}
-      {result && <p style={{ marginTop: 8 }}>{result === 'correct' ? '正解です' : `正解: ${card.back}`}</p>}
+      {!result && (
+        <button onClick={submit} className="mt-3 w-full rounded-xl bg-moss py-2.5 text-sm font-medium text-moss-ink hover:opacity-90">
+          確認
+        </button>
+      )}
+      {result && (
+        <p className={`mt-3 text-center text-sm ${result === 'correct' ? 'text-moss' : 'text-clay'}`}>
+          {result === 'correct' ? '正解です' : `正解: ${card.back}`}
+        </p>
+      )}
     </div>
   );
 }
@@ -343,15 +373,17 @@ function Minhaya({ card, onAnswer }: { card: Card; onAnswer: (card: Card, qualit
   }
 
   return (
-    <div style={{ border: '1px solid #e0e0e0', borderRadius: 12, padding: 16, textAlign: 'center' }}>
-      <p style={{ color: '#888', fontSize: 13 }}>{card.front}</p>
-      <p style={{ fontSize: 24, fontWeight: 700, letterSpacing: 4, margin: '14px 0' }}>
+    <div className="rounded-2xl border border-line bg-paper-card p-6 text-center">
+      <p className="text-sm text-ink-sub">{card.front}</p>
+      <p className="my-5 font-serif text-3xl font-semibold tracking-[0.2em]">
         {chars.slice(0, pos).join('')}
-        <span style={{ color: '#aaa' }}>{'＿'.repeat(chars.length - pos)}</span>
+        <span className="text-ink-sub/50">{'＿'.repeat(chars.length - pos)}</span>
       </p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <div className="grid grid-cols-2 gap-2">
         {options.map((ch, i) => (
-          <button key={i} onClick={() => choose(ch)} disabled={locked}>{ch}</button>
+          <button key={i} onClick={() => choose(ch)} disabled={locked} className={choiceBtn}>
+            {ch}
+          </button>
         ))}
       </div>
     </div>
